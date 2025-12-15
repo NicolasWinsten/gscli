@@ -35,7 +35,7 @@ def submit(
     # User can specify a directory to submit all files within
     # TODO catch errors and report
     if len(files) == 1 and os.path.isdir(files[0]):
-        files = collect_files_in_directory(files[0])
+        files = collect_file_objs(collect_files_in_directory(files[0]))
     else:
         files = collect_file_objs(files)
 
