@@ -1,15 +1,17 @@
 from multiprocessing import connection
+import sys
 from typing import NamedTuple
 import os
 import json
 import requests
 from pathlib import Path
 from cryptography.fernet import Fernet
+import platformdirs
 from gradescopeapi.classes.connection import GSConnection
 from gradescopeapi.classes.account import Account
 
-# Encrypted cache directory
-CONFIG_DIR = Path.home() / ".config" / "gscli"
+# Encrypted cache directory - use platform-appropriate paths
+CONFIG_DIR = Path(platformdirs.user_config_dir("gscli"))
 CACHE_FILE = CONFIG_DIR / "session_cache"
 KEY_FILE = CONFIG_DIR / "cache.key"
 
@@ -53,7 +55,11 @@ def _get_stored_session_cookies() -> dict | None:
 		cookies_dict = json.loads(cookies_json)
 		return cookies_dict
 	except Exception as e:
-		print(f"WARNING: Cached session cookies could not be retrieved: {e}")
+		print(
+			f"WARNING: Cached session cookies could not be retrieved: {e}",
+			flush=True,
+			file=sys.stderr
+		)
 		return None
 	
 
@@ -68,9 +74,16 @@ def store_session_cookies(session: requests.Session) -> None:
 	# encrypted_data = cipher.encrypt(cookies_json.encode('utf-8'))
 	# CACHE_FILE.write_bytes(encrypted_data)
 	
-	CACHE_FILE.write_text(cookies_json)
-	# Restrict cache file to user only
-	CACHE_FILE.chmod(0o600)
+	# Restrict cache file to user only (may fail silently on Windows, so wrap in try-except)
+	try:
+		CACHE_FILE.write_text(cookies_json)
+		CACHE_FILE.chmod(0o600)
+	except OSError as e:
+		print(
+			f"WARNING: Could not set file permissions on cache file: {e}",
+			flush=True,
+			file=sys.stderr
+		)
 
 def clear_session_cache() -> None:
 	"""Clears the stored session cache."""
