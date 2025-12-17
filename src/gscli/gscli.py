@@ -38,6 +38,7 @@ def auth_callback() -> None:
         password = typer.prompt("Gradescope Password", hide_input=True)
         try:
             connection = login_gradescope(email, password)
+            store_session_cookies(connection.session)
             print("[blue]Thank you! You are now logged in.[/blue]")
         except Exception as e:
             print_err(e)
