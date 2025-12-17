@@ -168,14 +168,22 @@ def submit(
         print_err(e)
         return
 
-    # TODO prompt user to confirm submission details (and provide flag to skip -force)
+    # TODO prompt user to confirm submission details if the file list is long (and provide flag to skip -force)
     
     session = connection.session
 
-    submission_link = upload_assignment(session, course, assignment, *files, leaderboard_name=leaderboard_name)
+    try:
+        submission_link = upload_assignment(session, course, assignment, *files, leaderboard_name=leaderboard_name)
+    except Exception as e:
+        # TODO a command like this: gscli submit 1198 74777 ./tests/uploads/correct/calculator.py
+        # causes an ugly runtime error in the gradescopeapi library
+        submission_link = None
 
     if submission_link is None:
-        print("[red]Failed to submit. Probably the deadline has passed or you are missing a form field (e.g., leaderboard name).[/red]")
+        print("[red]Failed to submit.[/red] Here are some possible reasons:")
+        print(" - The course or assignment id is incorrect")
+        print(" - The assignment/course is not accepting submissions")
+        print(" - You are missing a required form field (e.g., leaderboard name)")
         return
     
     print("[gold1]Files uploaded:[/gold1]")
