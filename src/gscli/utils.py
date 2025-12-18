@@ -153,33 +153,58 @@ def parse_results_json(json_data: dict) -> list[TestCaseResult]:
 	return results
 
 
-def collect_file_objs(file_paths: list[str]) -> list:
-	"""Open files and return a list of file objects."""
+def collect_file_objs(file_paths: list[str], recursive: bool) -> list:
+	"""Collect and open files in binary read mode.
+	
+	Args:
+		file_paths: List of file or directory paths. Hidden files are only included if explicitly named.
+		recursive: If True, recursively follow subdirectories
+		
+	Returns:
+		List of file objects opened in binary read mode
+	"""
 	file_paths = list(set(file_paths))  # remove duplicates
+	file_objs = []
+	
 
-	opened_files = []
-	try:
-		for file_path in file_paths:
-			opened_files.append(open(file_path, "rb"))
-	except Exception as e:
-		for f in opened_files:
-			f.close()
-		raise e
-	return opened_files
+	def should_skip(path: Path) -> bool:
+		"""Check if a path should be skipped (hidden or in skip list)."""
+		return path.name.startswith('.')
+	
+	def collect_from_dir(dir_path: Path, is_recursive: bool) -> None:
+		"""Recursively collect files from a directory."""
+		try:
+			for item in dir_path.iterdir():
+				if should_skip(item):
+					continue
+				if item.is_file():
+					try:
+						file_objs.append(open(item, "rb"))
+					except (IOError, OSError) as e:
+						print(f"WARNING: Could not open file {item}: {e}", file=sys.stderr)
+				elif item.is_dir() and is_recursive:
+					collect_from_dir(item, is_recursive=True)
+		except (IOError, OSError) as e:
+			print(f"WARNING: Could not access directory {dir_path}: {e}", file=sys.stderr)
 
-def collect_files_in_directory(directory_path: str) -> list[str]:
-	"""Collect all file paths in a directory."""
-	file_paths = []
-	for root, _, files in os.walk(directory_path):
-		for file in files:
-			file_paths.append(os.path.join(root, file))
-	return file_paths
+	for path_str in file_paths:
+		path = Path(path_str)
+		try:
+			if path.is_file():
+				# Open explicitly named files regardless of hidden status
+				file_objs.append(open(path, "rb"))
+			elif path.is_dir():
+				collect_from_dir(path, is_recursive=recursive)
+		except (IOError, OSError) as e:
+			print(f"WARNING: Could not access path {path}: {e}", file=sys.stderr)
+			
+	return file_objs
 
 
-def parse_assignments_list(json_data: dict) -> dict[int, str]:
-	"""Parse assignments list from Gradescope JSON data."""
-	assignments = {}
-	for assignment in json_data.get('assignments', []):
-		assignments[assignment['id']] = assignment['name']
-	return assignments
+# def parse_assignments_list(json_data: dict) -> dict[int, str]:
+# 	"""Parse assignments list from Gradescope JSON data."""
+# 	assignments = {}
+# 	for assignment in json_data.get('assignments', []):
+# 		assignments[assignment['id']] = assignment['name']
+# 	return assignments
 

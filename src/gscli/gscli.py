@@ -1,16 +1,17 @@
 """CLI commands."""
+import sys
 import time
 from datetime import datetime, timezone
 from rich import print
 from rich.spinner import Spinner
 from rich.live import Live
 from gradescopeapi.classes.upload import upload_assignment
-import os
+from pathlib import Path
 import typer
 from typing import List
 from typing_extensions import Annotated
 from .utils import (
-  collect_files_in_directory, collect_file_objs, report_test_case_results,
+  collect_file_objs, report_test_case_results,
   login_gradescope, restore_connection, store_session_cookies,
   parse_results_json
 )
@@ -21,9 +22,9 @@ connection = None
 def print_err(e: Exception | str) -> None:
     """Print an error message."""
     if hasattr(e, 'message'):
-        print(f"[red]{e.message}[/red]")
+        print(f"[red]{e.message}[/red]", file=sys.stderr)
     else:
-        print(f"[red]{e}[/red]")
+        print(f"[red]{e}[/red]", file=sys.stderr)
 
 # Callback to authenticate user before running any command
 def auth_callback() -> None:
@@ -152,19 +153,17 @@ def submit(
     course: Annotated[str, typer.Argument(help="Course id")],
     assignment: Annotated[str, typer.Argument(help="Assignment id")],
     files: Annotated[List[str] | None, typer.Argument(help="File list or directory to submit")] = None,
-    leaderboard_name: Annotated[str | None, typer.Option(help="Leaderboard name")] = None,
+    leaderboard_name: Annotated[str | None, typer.Option("-n", "--leaderboard", help="Leaderboard name")] = None,
+    recursive: Annotated[bool, typer.Option("-r", "--recursive", help="Recursively search directories for files")] = False,
 ) -> None:
     """Submit an assignment"""
 
     # if no files are given, submit all files in current directory
-    files = ["."] if files is None else files
+    files = [str(Path.cwd().absolute())] if files is None else files
 
     # User can specify a directory to submit all files within
     try:
-        if len(files) == 1 and os.path.isdir(files[0]):
-            files = collect_file_objs(collect_files_in_directory(files[0]))
-        else:
-            files = collect_file_objs(files)
+        files = collect_file_objs(files, recursive=recursive)
     except Exception as e:
         print_err(e)
         return
@@ -176,9 +175,15 @@ def submit(
     try:
         submission_link = upload_assignment(session, course, assignment, *files, leaderboard_name=leaderboard_name)
     except Exception as e:
-        # TODO a command like this: gscli submit 1198 74777 ./tests/uploads/correct/calculator.py
-        # causes an ugly runtime error in the gradescopeapi library
+        # a command like this: gscli submit 34 34 will cause an internal runtime error in gradescopeapi library
+        # some course ids but not others cause a runtime error in that library
+        # just report the course id was maybe wrong
         submission_link = None
+    
+    print("[gold1]Files uploaded:[/gold1]")
+    for f in files:
+        print(f" - {Path(f.name)}")
+        f.close()
 
     if submission_link is None:
         print("[red]Failed to submit.[/red] Here are some possible reasons:")
@@ -186,11 +191,6 @@ def submit(
         print(" - The assignment/course is not accepting submissions")
         print(" - You are missing a required form field (e.g., leaderboard name)")
         return
-    
-    print("[gold1]Files uploaded:[/gold1]")
-    for f in files:
-        print(f" - {f.name}")
-        f.close()
 
     # Poll for submission results
     timeout = 100  # seconds
@@ -227,7 +227,7 @@ def submit(
                 break
 
             status = json_response['status']
-            status_text = status_messages[status]
+            status_text = status_messages.get(status, status)
             spinner.update(text=f"{status_text}...")
             time.sleep(poll_interval)
 

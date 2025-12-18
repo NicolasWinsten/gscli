@@ -71,7 +71,7 @@ def test_submit_valid_file(invoke_cli):
         PYTHON_COURSE_ID,
         PYTHON_ASSIGNMENT_1,
         CORRECT_CALCULATOR_FILE_PATH,
-        "--leaderboard-name",
+        "-n",
         "leaderboard-name"
     ], input=f"{STUDENT_EMAIL_2}\n{STUDENT_PASSWORD_2}\n")
 
