@@ -2,7 +2,7 @@
 
 import typer
 
-from .gscli import submit, join, list_assignments_and_courses, auth_callback
+from .gscli import submit, join, status, logout, list_assignments_and_courses
 
 
 app = typer.Typer(
@@ -11,12 +11,13 @@ app = typer.Typer(
     # Disable showing local variables in exceptions, because it may reveal password
     pretty_exceptions_show_locals=False,
     no_args_is_help=True,
-    callback=auth_callback
 )
 
-app.command()(submit)
-app.command()(join)
+app.command(no_args_is_help=True)(submit)
+app.command(no_args_is_help=True)(join)
 app.command(name="list")(list_assignments_and_courses)
+app.command(no_args_is_help=True)(status)
+app.command()(logout)
 
 if __name__ == "__main__":
     app()

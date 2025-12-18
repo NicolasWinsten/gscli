@@ -9,6 +9,8 @@ import platformdirs
 from gradescopeapi.classes.connection import GSConnection
 from gradescopeapi.classes.account import Account
 
+GRADESCOPE_URL = "https://www.gradescope.com"
+
 # Encrypted cache directory - use platform-appropriate paths
 CONFIG_DIR = Path(platformdirs.user_config_dir("gscli"))
 CACHE_FILE = CONFIG_DIR / "session_cache"
@@ -150,6 +152,49 @@ def parse_results_json(json_data: dict) -> list[TestCaseResult]:
 		)
 		results.append(test_case_result)
 	return results
+
+
+def get_submissions(session: requests.Session, course_id: str) -> dict[str, str]:
+	"""Retrieve the user's latest submissions for a given course's assignments."""
+	from bs4 import BeautifulSoup
+	
+	url = f"{GRADESCOPE_URL}/courses/{course_id}"
+	
+	response = session.get(url)
+	response.raise_for_status()
+	
+	soup = BeautifulSoup(response.content, 'html.parser')
+	assignment_submissions = {}
+	
+	# Find all submission links matching the pattern
+	for link in soup.find_all('a'):
+		href = link.get('href')
+		if href and '/assignments/' in href and '/submissions/' in href:
+			# Extract assignment and submission IDs from href
+			# Pattern: /courses/{course_id}/assignments/{assignment_id}/submissions/{submission_id}
+			parts = href.split('/')
+			if "assignments" in parts and "submissions" in parts:
+				assignments_idx = parts.index('assignments') + 1
+				assignment_id = parts[assignments_idx]
+				submission_idx = parts.index('submissions') + 1
+				submission_id = parts[submission_idx]
+				
+				# Use assignment id as key, submission id as value
+				assignment_submissions[assignment_id] = submission_id
+	
+	return assignment_submissions
+
+
+def make_submission_link(course_id: str, assignment_id: str, submission_id: str) -> str:
+	"""Construct a Gradescope submission URL."""
+	return f"{GRADESCOPE_URL}/courses/{course_id}/assignments/{assignment_id}/submissions/{submission_id}"
+
+
+def fetch_submission_status(session: requests.Session, submission_link: str) -> dict:
+	"""Fetch the status of a specific submission by visiting its Gradescope URL."""
+	response = session.get(submission_link, headers={'Accept': 'application/json, text/javascript'})
+	response.raise_for_status()
+	return response.json()
 
 
 def collect_file_objs(file_paths: list[str], recursive: bool) -> list:

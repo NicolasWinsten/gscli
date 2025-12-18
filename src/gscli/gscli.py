@@ -12,8 +12,9 @@ from typing import List
 from typing_extensions import Annotated
 from .utils import (
   collect_file_objs, report_test_case_results,
-  login_gradescope, restore_connection, store_session_cookies,
-  parse_results_json
+  login_gradescope, restore_connection, store_session_cookies, parse_results_json,
+  get_submissions, fetch_submission_status, make_submission_link,
+  clear_session_cache
 )
 
 # Global GSConnection connecting to Gradescope
@@ -27,8 +28,7 @@ def print_err(e: Exception | str, color: bool = True) -> None:
     else:
         print(message, file=sys.stderr)
 
-# Callback to authenticate user before running any command
-def auth_callback() -> None:
+def login_if_needed() -> None:
     global connection
     connection = restore_connection()
     if connection is not None:
@@ -47,6 +47,12 @@ def auth_callback() -> None:
             exit(1)
 
 
+def report_submission_results(list_of_results: list, submission_link: str) -> None:
+    for result in list_of_results:
+        print(report_test_case_results(result))
+    print(f"[blue]View your submission at {submission_link}[/blue]")
+
+
 def join(
     course: Annotated[int, typer.Argument(help="Course id")],
 ) -> None:
@@ -55,23 +61,54 @@ def join(
 
     # store_session_cookies(connection.session)
 
+def logout() -> None:
+    """Log out of Gradescope"""
+    clear_session_cache()
+    print("[blue]You are logged out.[/blue]")
+
 # Scrape submission results for an assignment at submission link
 # Currently, no easy way to do this besides scraping the assignment page for a
 # submission link, and then collecting the results from there.
 def status(
-    course: Annotated[int, typer.Argument(help="Course id")],
-    assignment: Annotated[int, typer.Argument(help="Assignment id")],
+    course: Annotated[str, typer.Argument(help="Course id")],
+    assignment: Annotated[str, typer.Argument(help="Assignment id")],
 ) -> None:
     """Check submission status for an assignment."""
-    pass
+    login_if_needed()
+    
+    try:
+        assignment_submissions = get_submissions(connection.session, course_id=course)
 
-    # store_session_cookies(connection.session)
+        if assignment in assignment_submissions:
+            submission_id = assignment_submissions[assignment]
+            submission_link = make_submission_link(course, assignment, submission_id)
+            status_json = fetch_submission_status(connection.session, submission_link)
+        else:
+            print_err(f"No submission found for assignment {assignment} in course {course}")
+            return
+
+    except Exception as e:
+        print_err(e)
+        print_err("Check that the course and assignment IDs are correct", color=False)
+        return
+    
+    finally:
+        store_session_cookies(connection.session)
+        
+    if status_json['status'] == 'processed':
+        test_case_results = parse_results_json(status_json['results'])
+        report_submission_results(test_case_results, submission_link)
+    else:
+        print(f"Status: {status_json['status']}")
+
 
 def list_assignments_and_courses(
     all: Annotated[bool, typer.Option("-a", "--all", help="Show all assignments (not just active ones)")] = False,
     show_only_courses: Annotated[bool, typer.Option("-c", "--courses", help="Only list courses")] = False
 ) -> None:
     """List courses and assignments."""
+    login_if_needed()
+    
     try:
         courses = connection.account.get_courses()
     except Exception as e:
@@ -159,6 +196,8 @@ def submit(
 ) -> None:
     """Submit an assignment"""
 
+    login_if_needed()
+
     # if no files are given, submit all files in current directory
     files = [str(Path.cwd().absolute())] if files is None else files
 
@@ -198,6 +237,7 @@ def submit(
     start_time = time.time()
     poll_interval = 1
     
+    # TODO lift this code out so that gscli status can also use it
     status_messages = {
         'unprocessed': 'Waiting to be processed',
         'autograder_harness_started': 'Preparing autograder',
@@ -212,22 +252,27 @@ def submit(
     with Live(spinner, refresh_per_second=8, transient=True):
         while True:
             try:
-                response = session.get(submission_link, headers={'Accept': 'application/json, text/javascript'})
-                response.raise_for_status()
-                json_response = response.json()
+                # response = session.get(submission_link, headers={'Accept': 'application/json, text/javascript'})
+                # response.raise_for_status()
+                # json_response = response.json()
+
+                status_json = fetch_submission_status(session, submission_link)
 
             except Exception as e:
                 print_err(e)
                 break
+        
+            finally:
+                store_session_cookies(session)
             
-            if json_response['status'] == 'processed':
-                results_data = parse_results_json(json_response['results'])
+            if status_json['status'] == 'processed':
+                results_data = parse_results_json(status_json['results'])
                 break
 
-            if time.time() - start_time >= timeout:
+            elif time.time() - start_time >= timeout:
                 break
 
-            status = json_response['status']
+            status = status_json['status']
             status_text = status_messages.get(status, status)
             spinner.update(text=f"{status_text}...")
             time.sleep(poll_interval)
@@ -235,11 +280,8 @@ def submit(
     if results_data:
         print("\nAutograder Results:")
         print("=" * 50)
-        for result in results_data:
-            print(report_test_case_results(result))
+        report_submission_results(results_data, submission_link)
     elif time.time() - start_time >= timeout:
         print("[red]Timeout reached while waiting for autograder results.[/red]")
         print(f"Check your submission at: [blue]{submission_link}[/blue]")
         print("Or use [bold]gscli status[/bold] command later to check for results.")
-
-    store_session_cookies(connection.session)
