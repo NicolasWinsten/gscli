@@ -19,12 +19,13 @@ from .utils import (
 # Global GSConnection connecting to Gradescope
 connection = None
 
-def print_err(e: Exception | str) -> None:
+def print_err(e: Exception | str, color: bool = True) -> None:
     """Print an error message."""
-    if hasattr(e, 'message'):
-        print(f"[red]{e.message}[/red]", file=sys.stderr)
+    message = e.message if hasattr(e, 'message') else str(e)
+    if color:
+        print(f"[red]{message}[/red]", file=sys.stderr)
     else:
-        print(f"[red]{e}[/red]", file=sys.stderr)
+        print(message, file=sys.stderr)
 
 # Callback to authenticate user before running any command
 def auth_callback() -> None:
@@ -186,12 +187,12 @@ def submit(
         f.close()
 
     if submission_link is None:
-        print("[red]Failed to submit.[/red] Here are some possible reasons:")
-        print(" - The course or assignment id is incorrect")
-        print(" - The assignment/course is not accepting submissions")
-        print(" - You are missing a required form field (e.g., leaderboard name)")
+        print_err("[red]Failed to submit.[/red] Here are some possible reasons:", color=False)
+        print_err(" - The course or assignment id is incorrect", color=False)
+        print_err(" - The assignment/course is not accepting submissions", color=False)
+        print_err(" - You are missing a required form field (e.g., leaderboard name)", color=False)
         return
-
+    
     # Poll for submission results
     timeout = 100  # seconds
     start_time = time.time()

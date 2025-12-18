@@ -75,34 +75,40 @@ def test_submit_valid_file(invoke_cli):
         "leaderboard-name"
     ], input=f"{STUDENT_EMAIL_2}\n{STUDENT_PASSWORD_2}\n")
 
+    clear_session_cache()
+    
     assert result.exit_code == 0
     assert "Files uploaded:" in result.stdout
     assert CORRECT_CALCULATOR_FILE_PATH in result.stdout
     assert "Autograder Results:" in result.stdout
 
+    
+
+def test_wrong_password(invoke_cli):
     clear_session_cache()
 
-    # TODO check test cases
+    result = invoke_cli(["list"], input=f"{STUDENT_EMAIL_2}\nwrong_password\n")
 
-# def test_wrong_password(invoke_cli):
-#     email = os.getenv("STUDENT2_EMAIL")
-#     wrong_password = "wrong_password"
-#     course = os.getenv("COURSE_ID")
-#     assignment = os.getenv("CALCULATOR_ASSIGNMENT_ID")
-#     upload_file_path = "tests/uploads/calculator.py"
+    clear_session_cache()
 
-#     result = invoke_cli([
-#         "submit",
-#         course,
-#         assignment,
-#         upload_file_path,
-#         "--leaderboard-name",
-#         "leaderboard-name"
-#     ], input=f"{email}\n{wrong_password}\n")
+    assert "Invalid credentials" in result.stdout
 
-#     assert result.exit_code != 0
-#     assert "Invalid credentials" in result.stdout
+def test_wrong_course_id(invoke_cli):
+    clear_session_cache()
+    
+    result = invoke_cli([
+        "submit",
+        "0" * len(PYTHON_COURSE_ID),
+        PYTHON_ASSIGNMENT_1,
+        CORRECT_CALCULATOR_FILE_PATH,
+        "-n",
+        "leaderboard-name"
+    ], input=f"{STUDENT_EMAIL_2}\n{STUDENT_PASSWORD_2}\n")
 
+    clear_session_cache()
+
+    assert "Failed to submit" in result.output
+    assert "Autograder Results:" not in result.stdout
 
 # def test_assignment_unavailable(invoke_cli):
 #     email = os.getenv("STUDENT2_EMAIL")

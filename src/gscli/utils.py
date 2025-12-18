@@ -1,7 +1,6 @@
 from multiprocessing import connection
 import sys
 from typing import NamedTuple
-import os
 import json
 import requests
 from pathlib import Path
