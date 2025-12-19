@@ -231,15 +231,19 @@ def list_assignments_and_courses(
     store_session_cookies(connection.session)
 
 def submit(
-    course: Annotated[str, typer.Argument(help="Course id")],
-    assignment: Annotated[str, typer.Argument(help="Assignment id")],
+    course: Annotated[str | None, typer.Option("-c", "--course", help="Course id")] = None,
+    assignment: Annotated[str | None, typer.Option("-a", "--assignment", help="Assignment id")] = None,
     files: Annotated[List[str] | None, typer.Argument(help="File list or directory to submit")] = None,
     leaderboard_name: Annotated[str | None, typer.Option("-n", "--leaderboard", help="Leaderboard name")] = None,
     recursive: Annotated[bool, typer.Option("-r", "--recursive", help="Recursively search directories for files")] = False,
 ) -> None:
-    """Submit an assignment"""
+    """Make a submission to your current assignment."""
 
     login_if_needed()
+    if course is None or assignment is None:
+        current_assignment = load_current_assignment_info_or_exit()
+        course = current_assignment["course"] if course is None else course
+        assignment = current_assignment["assignment"] if assignment is None else assignment
 
     # if no files are given, submit all files in current directory
     files = [str(Path.cwd().absolute())] if files is None else files
@@ -326,10 +330,7 @@ def submit(
         print("Or use [bold]gscli status[/bold] command later to check for results.")
 
 
-def choose(
-    course: Annotated[str | None, typer.Argument(help="Course id")] = None,
-    assignment: Annotated[str | None, typer.Argument(help="Assignment id")] = None
-):
+def choose() -> None:
     """Choose a course and assignment for the current working directory. Provide no arguments to interactively select a course and assignment."""
     
     login_if_needed()
