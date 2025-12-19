@@ -12,9 +12,11 @@ from gradescopeapi.classes.account import Account
 GRADESCOPE_URL = "https://www.gradescope.com"
 
 # Encrypted cache directory - use platform-appropriate paths
-CONFIG_DIR = Path(platformdirs.user_config_dir("gscli"))
-CACHE_FILE = CONFIG_DIR / "session_cache"
-KEY_FILE = CONFIG_DIR / "cache.key"
+GLOBAL_CONFIG_DIR = Path(platformdirs.user_config_dir("gscli"))
+CACHE_FILE = GLOBAL_CONFIG_DIR / "session_cache"
+KEY_FILE = GLOBAL_CONFIG_DIR / "cache.key"
+CURRENT_ASSIGNMENT_FILE = GLOBAL_CONFIG_DIR / "current_assignment"
+
 
 # TODO can use encryption to store cookies,
 # but better to use keyring when this code is moved to intermediate server
@@ -66,7 +68,7 @@ def _get_stored_session_cookies() -> dict | None:
 
 def store_session_cookies(session: requests.Session) -> None:
 	"""Saves session cookies to ~/.config/gscli for future use."""
-	CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+	GLOBAL_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
 	cookies_dict = session.cookies.get_dict()
 	cookies_json = json.dumps(cookies_dict)
 	
@@ -123,7 +125,41 @@ def login_gradescope(email: str, password: str) -> GSConnection:
 	connection.login(email, password)
 	
 	return connection
+
+def get_courses(connection: GSConnection) -> dict[str, dict]:
+	"""Attempt to retrieve all the courses
 	
+	Returns a dictionary where the keys are course IDs and the values are course objs
+
+	See:	https://github.com/nyuoss/gradescope-api/blob/main/src/gradescopeapi/classes/courses.py
+			for more information on the data shape of courses
+	"""
+	courses_response = connection.account.get_courses()
+	course_list = { **courses_response['student'], **courses_response['instructor'] }
+	return course_list
+
+def write_to_current_assignment_file(course_name: str, course: str, assignment_name: str, assignment: str) -> None:
+	"""Update the current assignment file with the given course and assignment information."""
+	GLOBAL_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+	CURRENT_ASSIGNMENT_FILE.write_text(json.dumps({
+		"course": course,
+		"assignment": assignment,
+		"course_name": course_name,
+		"assignment_name": assignment_name
+	}))
+
+def retrieve_current_assignment() -> dict | None:
+	"""Retrieve the user's currently set assignment.
+	A dictionary containing the course id, assignment id, course name, assignment name, and files to submit if available."""
+	if not Path(CURRENT_ASSIGNMENT_FILE).exists():
+		return None
+	with open(CURRENT_ASSIGNMENT_FILE, "r") as f:
+		return json.load(f)
+
+def clear_current_assignment_file() -> None:
+	"""Clear the current assignment file."""
+	if CURRENT_ASSIGNMENT_FILE.exists():
+		CURRENT_ASSIGNMENT_FILE.unlink()
 
 class TestCaseResult(NamedTuple):
     passed: bool
@@ -244,11 +280,4 @@ def collect_file_objs(file_paths: list[str], recursive: bool) -> list:
 			
 	return file_objs
 
-
-# def parse_assignments_list(json_data: dict) -> dict[int, str]:
-# 	"""Parse assignments list from Gradescope JSON data."""
-# 	assignments = {}
-# 	for assignment in json_data.get('assignments', []):
-# 		assignments[assignment['id']] = assignment['name']
-# 	return assignments
 
