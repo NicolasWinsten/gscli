@@ -251,6 +251,9 @@ def submit(
     # User can specify a directory to submit all files within
     try:
         files = collect_file_objs(files, recursive=recursive)
+        if not files:
+            print_err("You must specify at least one file to submit.", color=False)
+            return
     except Exception as e:
         print_err(e)
         return
@@ -331,7 +334,7 @@ def submit(
 
 
 def choose() -> None:
-    """Choose a course and assignment for the current working directory. Provide no arguments to interactively select a course and assignment."""
+    """Choose a course and assignment to submit to."""
     
     login_if_needed()
     
